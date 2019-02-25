@@ -18,10 +18,10 @@ queue<sensor_msgs::ImageConstPtr> img_buf;
 ros::Publisher pub_img,pub_match;
 ros::Publisher pub_restart;
 
-FeatureTracker trackerData[NUM_OF_CAM];
+FeatureTracker trackerData[NUM_OF_CAM]; // Main object
 double first_image_time;
-int pub_count = 1;
-bool first_image_flag = true;
+int pub_count = 1; // @kev reset if FREQ reachs, or restart
+bool first_image_flag = true; // @kev reset if FREQ reachs, or restart
 double last_image_time = 0;
 bool init_pub = 0;
 
@@ -35,6 +35,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         return;
     }
     // detect unstable camera stream
+    // @kev check time and restart
     if (img_msg->header.stamp.toSec() - last_image_time > 1.0 || img_msg->header.stamp.toSec() < last_image_time)
     {
         ROS_WARN("image discontinue! reset the feature tracker!");
@@ -211,8 +212,9 @@ int main(int argc, char **argv)
     readParameters(n);
 
     for (int i = 0; i < NUM_OF_CAM; i++)
-        trackerData[i].readIntrinsicParameter(CAM_NAMES[i]);
+        trackerData[i].readIntrinsicParameter(CAM_NAMES[i]); // @kev Get cam intrinsic
 
+    // @kev If fisheye, add a circle mask to remove noisy edge points
     if(FISHEYE)
     {
         for (int i = 0; i < NUM_OF_CAM; i++)

@@ -42,7 +42,7 @@ void FeatureTracker::setMask()
     
 
     // prefer to keep features that are tracked for long time
-    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
+    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id; //#kev <count,<xy,id>>
 
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
@@ -52,6 +52,7 @@ void FeatureTracker::setMask()
             return a.first > b.first;
          });
 
+    //@kev clean cnt, xy, id and reinsert
     forw_pts.clear();
     ids.clear();
     track_cnt.clear();
@@ -63,7 +64,9 @@ void FeatureTracker::setMask()
             forw_pts.push_back(it.second.first);
             ids.push_back(it.second.second);
             track_cnt.push_back(it.first);
-            cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
+
+            //@kev From highest count point, set its MIN_DIST surrounding to 0, so its surrounding will not be chosen
+            cv::circle(mask, it.second.first, MIN_DIST, 0, -1); //@kev cv::circle(img,center,radius,color,thickness)
         }
     }
 }
@@ -84,8 +87,10 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     TicToc t_r;
     cur_time = _cur_time;
 
+    //@kev if EQUALIZE=1, then too bright / dark
     if (EQUALIZE)
     {
+        // createCLAHE(double clipLimit, Size tileGridSize)
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         TicToc t_c;
         clahe->apply(_img, img);
@@ -129,10 +134,10 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
     if (PUB_THIS_FRAME)
     {
-        rejectWithF();
+        rejectWithF(); //@kev Run only if forw_pts > 8
         ROS_DEBUG("set mask begins");
         TicToc t_m;
-        setMask();
+        setMask(); // @kev Sort and remove dense points
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
         ROS_DEBUG("detect feature begins");
@@ -148,6 +153,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
                 cout << "wrong size " << endl;
             cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
         }
+        
         else
             n_pts.clear();
         ROS_DEBUG("detect feature costs: %fms", t_t.toc());
@@ -176,7 +182,12 @@ void FeatureTracker::rejectWithF()
         for (unsigned int i = 0; i < cur_pts.size(); i++)
         {
             Eigen::Vector3d tmp_p;
+            // @kev 0. For Pinhole
+            // @kev 1. project 2d to 3d (normalize, not true)
+            // @kev 2. Undistorted the points
             m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
+
+            // @kev project back to pixel
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
             un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
