@@ -15,11 +15,11 @@ using namespace std;
 
 struct SFMFeature
 {
-    bool state;
+    bool state; //@kev triangulate of not
     int id;
-    vector<pair<int,Vector2d>> observation;
-    double position[3];
-    double depth;
+    vector<pair<int,Vector2d>> observation; //@kev store <img, (u,v)> that sees this feature
+    double position[3]; //@kev 3d position
+    double depth; //@kev depth
 };
 
 struct ReprojectionError3D

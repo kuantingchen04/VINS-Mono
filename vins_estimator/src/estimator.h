@@ -31,8 +31,8 @@ class Estimator
     void setParameter();
 
     // interface
-    void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
-    void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header);
+    void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity); // @kev process for each measurement, apply imu preintegration using mid-integration
+    void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header); //@kev process for each image (push feature points, check parrallax determine keyframe, initialization, nonlinear optimization)
     void setReloFrame(double _frame_stamp, int _frame_index, vector<Vector3d> &_match_points, Vector3d _relo_t, Matrix3d _relo_r);
 
     // internal
@@ -53,7 +53,7 @@ class Estimator
     enum SolverFlag
     {
         INITIAL,
-        NON_LINEAR
+        NON_LINEAR  // @kev initialization success, tightly couple stauts
     };
 
     enum MarginalizationFlag
@@ -62,37 +62,39 @@ class Estimator
         MARGIN_SECOND_NEW = 1
     };
 
-    SolverFlag solver_flag;
+    SolverFlag solver_flag;  // @kev vins status
     MarginalizationFlag  marginalization_flag;
     Vector3d g;
     MatrixXd Ap[2], backup_A;
     VectorXd bp[2], backup_b;
-
+    
+    // @kev camera to imu RT
     Matrix3d ric[NUM_OF_CAM];
     Vector3d tic[NUM_OF_CAM];
 
+    // @kev each p, v, r, bias in sliding window
     Vector3d Ps[(WINDOW_SIZE + 1)];
     Vector3d Vs[(WINDOW_SIZE + 1)];
     Matrix3d Rs[(WINDOW_SIZE + 1)];
     Vector3d Bas[(WINDOW_SIZE + 1)];
     Vector3d Bgs[(WINDOW_SIZE + 1)];
-    double td;
+    double td;  // @kev time difference between imu & camera data
 
     Matrix3d back_R0, last_R, last_R0;
     Vector3d back_P0, last_P, last_P0;
     std_msgs::Header Headers[(WINDOW_SIZE + 1)];
 
-    IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
+    IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];  // @kev each integrationBase in sliding window
     Vector3d acc_0, gyr_0;
 
-    vector<double> dt_buf[(WINDOW_SIZE + 1)];
-    vector<Vector3d> linear_acceleration_buf[(WINDOW_SIZE + 1)];
-    vector<Vector3d> angular_velocity_buf[(WINDOW_SIZE + 1)];
+    vector<double> dt_buf[(WINDOW_SIZE + 1)];  // @kev time interval between imu data
+    vector<Vector3d> linear_acceleration_buf[(WINDOW_SIZE + 1)];  // @kev acc measurement
+    vector<Vector3d> angular_velocity_buf[(WINDOW_SIZE + 1)];  // @kev gyr measurement
 
-    int frame_count;
+    int frame_count;  // @kev index of latest frame in sliding window
     int sum_of_outlier, sum_of_back, sum_of_front, sum_of_invalid;
 
-    FeatureManager f_manager;
+    FeatureManager f_manager;  // @kev feature data in sliding window
     MotionEstimator m_estimator;
     InitialEXRotation initial_ex_rotation;
 
@@ -103,9 +105,9 @@ class Estimator
     vector<Vector3d> point_cloud;
     vector<Vector3d> margin_cloud;
     vector<Vector3d> key_poses;
-    double initial_timestamp;
+    double initial_timestamp;  // @kev timestamp after initialization module (might be failed)
 
-
+    // @kev for ceres optimization
     double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];
     double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
     double para_Feature[NUM_OF_F][SIZE_FEATURE];
@@ -116,11 +118,14 @@ class Estimator
 
     int loop_window_index;
 
+    // @kev 
     MarginalizationInfo *last_marginalization_info;
     vector<double *> last_marginalization_parameter_blocks;
 
-    map<double, ImageFrame> all_image_frame;
-    IntegrationBase *tmp_pre_integration;
+    // @kev each frame will create a ImageFrame object
+    // store [image pose, pre_integration, points map]
+    map<double, ImageFrame> all_image_frame; //@kev Store all image frames using {timestamp: IF}
+    IntegrationBase *tmp_pre_integration;  // @kev for imageframe.pre_integration creation
 
     //relocalization variable
     bool relocalization_info;

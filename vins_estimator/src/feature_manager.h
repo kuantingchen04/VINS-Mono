@@ -15,7 +15,7 @@ using namespace Eigen;
 
 #include "parameters.h"
 
-class FeaturePerFrame
+class FeaturePerFrame //@kev frame class (ImageFrame is another one)
 {
   public:
     FeaturePerFrame(const Eigen::Matrix<double, 7, 1> &_point, double td)
@@ -41,12 +41,12 @@ class FeaturePerFrame
     double dep_gradient;
 };
 
-class FeaturePerId
+class FeaturePerId //@kev feature class
 {
   public:
     const int feature_id;
     int start_frame;
-    vector<FeaturePerFrame> feature_per_frame;
+    vector<FeaturePerFrame> feature_per_frame; //@kev which frame sees it
 
     int used_num;
     bool is_outlier;
@@ -90,7 +90,7 @@ class FeatureManager
     void removeBack();
     void removeFront(int frame_count);
     void removeOutlier();
-    list<FeaturePerId> feature;
+    list<FeaturePerId> feature; //@kev all feature points
     int last_track_num;
 
   private:

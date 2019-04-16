@@ -13,7 +13,7 @@
 #include "utility/visualization.h"
 
 
-Estimator estimator;
+Estimator estimator; //@kev estimator
 
 std::condition_variable con;
 double current_time = -1;
@@ -39,6 +39,8 @@ bool init_feature = 0;
 bool init_imu = 1;
 double last_imu_t = 0;
 
+// @kev predict pvq using previous pvq
+// where eq??
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     double t = imu_msg->header.stamp.toSec();
@@ -77,6 +79,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     gyr_0 = angular_velocity;
 }
 
+// @kev 
 void update()
 {
     TicToc t_predict;
@@ -94,7 +97,9 @@ void update()
         predict(tmp_imu_buf.front());
 
 }
-
+// @kev imu time = img time + td
+// input: imu_buf, feature_buf
+// measurements: [ <[imu1,imu2,..],img1>, ...]
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
 getMeasurements()
 {
@@ -102,9 +107,11 @@ getMeasurements()
 
     while (true)
     {
+        //@kev ends only when imu_buf or feature_buf is empty
         if (imu_buf.empty() || feature_buf.empty())
             return measurements;
 
+        // @kev only available when imu.back > img.front (which also garantee imu.front > img.front)
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
@@ -127,6 +134,9 @@ getMeasurements()
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
+
+        // @kev also push next imu.front(), which doesn't less than img.front()
+        // we didn't pop it out, thus it will be used to next img too!
         IMUs.emplace_back(imu_buf.front());
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
@@ -214,11 +224,11 @@ void process()
         std::unique_lock<std::mutex> lk(m_buf);
         con.wait(lk, [&]
                  {
-            return (measurements = getMeasurements()).size() != 0;
+            return (measurements = getMeasurements()).size() != 0; //@kev m_buf will be locked if measurement is processing
                  });
         lk.unlock();
         m_estimator.lock();
-        for (auto &measurement : measurements)
+        for (auto &measurement : measurements) //@kev operate on all (IMUs, Img) pairs
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
