@@ -121,6 +121,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
+    // @kev calculate latest 2nd & 3rd keyframe, determine if "2nd latest frame" is key frame
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
         marginalization_flag = MARGIN_OLD;
     else

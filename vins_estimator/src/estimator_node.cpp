@@ -27,6 +27,7 @@ std::mutex m_state;
 std::mutex i_buf;
 std::mutex m_estimator;
 
+// @kev current imu info
 double latest_time;
 Eigen::Vector3d tmp_P;
 Eigen::Quaterniond tmp_Q;
@@ -35,11 +36,13 @@ Eigen::Vector3d tmp_Ba;
 Eigen::Vector3d tmp_Bg;
 Eigen::Vector3d acc_0;
 Eigen::Vector3d gyr_0;
+
 bool init_feature = 0;
 bool init_imu = 1;
 double last_imu_t = 0;
 
-// @kev predict pvq using previous pvq
+// @kev predict pvq using previous pvq (tmp_PQV, acc_0, gyr_0)
+// used in update, imu_callback
 // where eq??
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
@@ -79,7 +82,8 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     gyr_0 = angular_velocity;
 }
 
-// @kev 
+// @kev if window init success,then  update imu in last window & iterative calcualte current imu
+// only used in process() when NONLINEAR state
 void update()
 {
     TicToc t_predict;
@@ -98,6 +102,7 @@ void update()
 
 }
 // @kev imu time = img time + td
+// @kev ends only when imu_buf or feature_buf is empty
 // input: imu_buf, feature_buf
 // measurements: [ <[imu1,imu2,..],img1>, ...]
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
@@ -107,7 +112,6 @@ getMeasurements()
 
     while (true)
     {
-        //@kev ends only when imu_buf or feature_buf is empty
         if (imu_buf.empty() || feature_buf.empty())
             return measurements;
 
@@ -118,7 +122,7 @@ getMeasurements()
             sum_of_wait++;
             return measurements;
         }
-
+        // @kev we need to throw img if imu.front < img.front (no imu at all)
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("throw img, only should happen at the beginning");
@@ -145,6 +149,7 @@ getMeasurements()
     return measurements;
 }
 
+// @kev push imu_msg into imu_buf, use predict() to predict current state
 void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     if (imu_msg->header.stamp.toSec() <= last_imu_t)
@@ -172,6 +177,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 }
 
 
+// @kev push feature_msg into feature_buf
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
     if (!init_feature)
@@ -186,6 +192,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
     con.notify_one();
 }
 
+// @kev if restart_msg = true, clear feature_buf & imu_buf, reset time
 void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
 {
     if (restart_msg->data == true)
@@ -207,6 +214,7 @@ void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
     return;
 }
 
+// @kev put points_msg into relo_buf
 void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 {
     //printf("relocalization callback! \n");
@@ -216,22 +224,29 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 }
 
 // thread: visual-inertial odometry
+// @kev VIO backend (IMU pre-integration, initialization, local BA)
 void process()
 {
     while (true)
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+
+        // @kev m_buf will be locked if measurement is processing
         std::unique_lock<std::mutex> lk(m_buf);
         con.wait(lk, [&]
                  {
-            return (measurements = getMeasurements()).size() != 0; //@kev m_buf will be locked if measurement is processing
+            return (measurements = getMeasurements()).size() != 0; 
                  });
         lk.unlock();
         m_estimator.lock();
-        for (auto &measurement : measurements) //@kev operate on all (IMUs, Img) pairs
+
+        // @kev operate on all (IMUs, Img) pairs 
+        for (auto &measurement : measurements) 
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+
+            // @kev pre-integration using processIMU
             for (auto &imu_msg : measurement.first)
             {
                 double t = imu_msg->header.stamp.toSec();
@@ -254,6 +269,8 @@ void process()
 
                 }
                 else
+                // this is the last imu
+                // interpolate and preintegrate
                 {
                     double dt_1 = img_t - current_time;
                     double dt_2 = t - img_t;
@@ -302,11 +319,12 @@ void process()
 
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
+            // @kev process image
             TicToc t_s;
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
             {
-                int v = img_msg->channels[0].values[i] + 0.5;
+                int v = img_msg->channels[0].values[i] + 0.5;  // @kev ??
                 int feature_id = v / NUM_OF_CAM;
                 int camera_id = v % NUM_OF_CAM;
                 double x = img_msg->points[i].x;

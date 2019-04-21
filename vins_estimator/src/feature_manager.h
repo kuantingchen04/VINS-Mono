@@ -15,7 +15,7 @@ using namespace Eigen;
 
 #include "parameters.h"
 
-class FeaturePerFrame //@kev frame class (ImageFrame is another one)
+class FeaturePerFrame //@kev cam/frame class (ImageFrame is another one)
 {
   public:
     FeaturePerFrame(const Eigen::Matrix<double, 7, 1> &_point, double td)

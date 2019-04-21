@@ -46,9 +46,11 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
 {
     ROS_DEBUG("input feature: %d", (int)image.size());
     ROS_DEBUG("num of feature: %d", getFeatureCount());
-    double parallax_sum = 0;
-    int parallax_num = 0;
-    last_track_num = 0;
+    double parallax_sum = 0;  // @kev total parrellax of common features latest 2nd & 3rd
+    int parallax_num = 0;  // @kev common feature number of latest 2nd & 3rd
+    last_track_num = 0;  // @kev feature number of latest frame
+
+    // @kev traverse all features
     for (auto &id_pts : image)
     {
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
@@ -59,11 +61,13 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
             return it.feature_id == feature_id;
                           });
 
+        // @kev first time sees this feature_id, add a FeaturePerId to "feature" ( list<featurePerId> )
         if (it == feature.end())
         {
             feature.push_back(FeaturePerId(feature_id, frame_count));
             feature.back().feature_per_frame.push_back(f_per_fra);
         }
+        // @kev else just update feature_id
         else if (it->feature_id == feature_id)
         {
             it->feature_per_frame.push_back(f_per_fra);
